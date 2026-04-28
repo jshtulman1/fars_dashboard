@@ -4,7 +4,7 @@ output:
   flexdashboard::flex_dashboard:
     orientation: rows
     vertical_layout: fill
-    source_code: "https://github.com/jshtulman1/fars_dashboard"
+    source_code: "https://github.com/jshtulman1/fars-dashboard"
     theme: cosmo
 runtime: shiny
 ---
@@ -247,8 +247,8 @@ output$bar_plot <- renderPlotly({
                    ticksuffix = "%",
                    range = list(0, 50)),
       yaxis = list(title = ""),
-      legend = list(orientation = "h", x = 0.5, xanchor = "center", y = -0.25),
-      margin = list(t = 75, b = 100)
+      legend = list(orientation = "h", x = 0.5, xanchor = "center", y = -0.30),
+      margin = list(t = 60, b = 110)
     ) %>%
     config(displayModeBar = FALSE)
 })
