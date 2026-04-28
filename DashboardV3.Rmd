@@ -4,7 +4,7 @@ output:
   flexdashboard::flex_dashboard:
     orientation: rows
     vertical_layout: fill
-    source_code: "https://github.com/jshtulman1/fars-dashboard"
+    source_code: "https://github.com/jshtulman1/fars_dashboard"
     theme: cosmo
 runtime: shiny
 ---
