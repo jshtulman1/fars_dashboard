@@ -3,8 +3,8 @@ title: "FARS Crash Fatalities Dashboard"
 output: 
   flexdashboard::flex_dashboard:
     orientation: rows
-    vertical_layout: fill
-    source_code: "https://github.com/jshtulman1/fars-dashboard"
+    vertical_layout: scroll
+    source_code: "https://github.com/jshtulman1/fars_dashboard"
     theme: cosmo
 runtime: shiny
 ---
@@ -112,19 +112,21 @@ Row {data-height=650}
 ### Choropleth Map
 
 ```{r}
-# Map Inpputs
-fillCol(flex = c(NA, 1),
-  fillRow(flex = c(1, 1),
+# Map Inputs
+fluidRow(
+  column(6,
     selectInput("map_year", "Year:",
                 choices = c("2023", "2022"),
-                selected = "2023"),
+                selected = "2023")
+  ),
+  column(6,
     selectInput("map_metric", "Metric:",
                 choices = c("Total Fatalities" = "fatalities",
                             "Rate per 100,000 People" = "rate_per100k"),
                 selected = "fatalities")
-  ),
-  plotlyOutput("map_plot")
+  )
 )
+plotlyOutput("map_plot", height = "500px")
 
 output$map_plot <- renderPlotly({
   
@@ -174,20 +176,24 @@ output$map_plot <- renderPlotly({
 
 ```{r}
 # Bar Chart Inputs
-fillCol(flex = c(NA, 1),
-  fillRow(flex = c(1, 1, 1),
+fluidRow(
+  column(4,
     selectInput("bar_year", "Year:",
                 choices = c("2023", "2022"),
-                selected = "2023"),
+                selected = "2023")
+  ),
+  column(4,
     selectInput("state_a", "State A:",
                 choices = state_choices,
-                selected = "WV"),
+                selected = "WV")
+  ),
+  column(4,
     selectInput("state_b", "State B:",
                 choices = state_choices,
                 selected = "GA")
-  ),
-  plotlyOutput("bar_plot")
+  )
 )
+plotlyOutput("bar_plot", height = "600px")
 
 output$bar_plot <- renderPlotly({
   
@@ -245,10 +251,13 @@ output$bar_plot <- renderPlotly({
       barmode = "group",
       xaxis = list(title = "Percent of Fatal Crashes (%)",
                    ticksuffix = "%",
-                   range = list(0, 50)),
+                   range = list(0, 50),
+                   standoff = 20),
       yaxis = list(title = ""),
-      legend = list(orientation = "h", x = 0.5, xanchor = "center", y = -0.30),
-      margin = list(t = 60, b = 110)
+      legend = list(orientation = "h",
+                    x = 0.5, xanchor = "center",
+                    y = -0.25, yanchor = "top"),
+      margin = list(t = 40, b = 130)
     ) %>%
     config(displayModeBar = FALSE)
 })
