@@ -1,0 +1,291 @@
+---
+title: "FARS Crash Fatalities Dashboard"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+    source_code: "https://github.com/jshtulman1/fars-dashboard"
+    theme: cosmo
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(tidyverse)
+library(plotly)
+library(shiny)
+
+# Load data
+fars <- read_csv("fars_data.csv")
+
+# Convert to long format
+fars_long <- fars %>%
+  pivot_longer(
+    cols = -c(state_abbr, state_name, population_2023),
+    names_to = c(".value", "year"),
+    names_pattern = "(.*)_(\\d{4})"
+  ) %>%
+  mutate(
+    year = as.integer(year),
+    rate_per100k = round(fatalities / population_2023 * 100000, 1)
+  )
+
+# Create vector containing state name choices
+state_choices <- setNames(fars$state_abbr, fars$state_name)
+```
+
+# Overview
+
+Row
+-----------------------------------
+### Total Traffic Fatalities (2023)
+```{r}
+total_fat <- sum(fars$fatalities_2023)
+total_fat_2022 <- sum(fars$fatalities_2022)
+delta_pct <- round((total_fat - total_fat_2022) / total_fat_2022 * 100, 1)
+
+valueBox(
+  value = format(total_fat, big.mark = ","),
+  caption = paste0("<b>Total Traffic Fatalities</b><br>Down ", abs(delta_pct), "% from 2022"),
+  icon = "fa-car-crash",
+  color = "danger"
+)
+```
+
+### Fatal Crashes (2023)
+```{r}
+# NHTSA published 37,654 fatal crashes in 2023, 39,221 in 2022
+fatal_crashes_2023 <- 37654
+fatal_crashes_2022 <- 39221
+crashes_delta <- round((fatal_crashes_2023 - fatal_crashes_2022) / fatal_crashes_2022 * 100, 1)
+
+valueBox(
+  value = format(fatal_crashes_2023, big.mark = ","),
+  caption = paste0("<b>Fatal Crashes</b><br>Down ", abs(crashes_delta), "% from 2022"),
+  icon = "fa-exclamation-triangle",
+  color = "warning"
+)
+```
+
+### National Rate per 100,000 People
+```{r}
+natl_rate <- round(total_fat / sum(fars$population_2023) * 100000, 1)
+
+valueBox(
+  value = natl_rate,
+  caption = "<b>National Fatality Rate</b><br>per 100,000 residents",
+  icon = "fa-users",
+  color = "primary"
+)
+```
+
+### Highest State Rate
+```{r}
+top_state <- fars_long %>%
+  filter(year == 2023) %>%
+  slice_max(rate_per100k, n = 1)
+
+valueBox(
+  value = top_state$rate_per100k,
+  caption = paste0("<b>Highest State Rate</b><br>", top_state$state_name, " (per 100k)"),
+  icon = "fa-arrow-up",
+  color = "danger"
+)
+```
+
+### Lowest State Rate
+```{r}
+bottom_state <- fars_long %>%
+  filter(year == 2023) %>%
+  slice_min(rate_per100k, n = 1)
+
+valueBox(
+  value = bottom_state$rate_per100k,
+  caption = paste0("<b>Lowest State Rate</b><br>", bottom_state$state_name, " (per 100k)"),
+  icon = "fa-arrow-down",
+  color = "success"
+)
+```
+
+Row {data-height=650}
+------------------
+### Choropleth Map
+
+```{r}
+# Map Inpputs
+fillCol(flex = c(NA, 1),
+  fillRow(flex = c(1, 1),
+    selectInput("map_year", "Year:",
+                choices = c("2023", "2022"),
+                selected = "2023"),
+    selectInput("map_metric", "Metric:",
+                choices = c("Total Fatalities" = "fatalities",
+                            "Rate per 100,000 People" = "rate_per100k"),
+                selected = "fatalities")
+  ),
+  plotlyOutput("map_plot")
+)
+
+output$map_plot <- renderPlotly({
+  
+  # Filter the data by year
+  map_data <- fars_long %>%
+    filter(year == as.integer(input$map_year))
+  
+  # Plot selected metric
+  if (input$map_metric == "fatalities") {
+    map_data$z_value <- map_data$fatalities
+    legend_title <- "Fatalities"
+  } else {
+    map_data$z_value <- map_data$rate_per100k
+    legend_title <- "Per 100k"
+  }
+  
+  # Hover box
+  map_data <- map_data %>%
+    mutate(
+      hover_text = paste0(
+        state_name, "<br>",
+        "Fatalities: ", format(fatalities, big.mark = ","), "<br>",
+        "Rate per 100k: ", rate_per100k
+      )
+    )
+  
+  # Build Chloropleth
+  plot_geo(map_data, locationmode = "USA-states") %>%
+    add_trace(
+      z = ~z_value,
+      locations = ~state_abbr,
+      text = ~hover_text,
+      hoverinfo = "text",
+      color = ~z_value,
+      colors = "Greens"
+    ) %>%
+    colorbar(title = legend_title) %>%
+    layout(
+      geo = list(scope = "usa"),
+      margin = list(t = 75, b = 5, l = 5, r = 5)
+    ) %>%
+    config(displayModeBar = FALSE)
+})
+```
+
+### Contributing Factors: State Comparison
+
+```{r}
+# Bar Chart Inputs
+fillCol(flex = c(NA, 1),
+  fillRow(flex = c(1, 1, 1),
+    selectInput("bar_year", "Year:",
+                choices = c("2023", "2022"),
+                selected = "2023"),
+    selectInput("state_a", "State A:",
+                choices = state_choices,
+                selected = "WV"),
+    selectInput("state_b", "State B:",
+                choices = state_choices,
+                selected = "GA")
+  ),
+  plotlyOutput("bar_plot")
+)
+
+output$bar_plot <- renderPlotly({
+  
+  # Get state data for specified year
+  data_a <- fars_long %>%
+    filter(state_abbr == input$state_a, year == as.integer(input$bar_year))
+  
+  data_b <- fars_long %>%
+    filter(state_abbr == input$state_b, year == as.integer(input$bar_year))
+  
+  # Build plot and sort by largest disparity
+  factors_df <- tibble(
+    factor = c("Alcohol-Impaired", "Speeding-Related", "Unrestrained Occupant"),
+    state_a_pct = c(data_a$alcohol_pct, data_a$speeding_pct, data_a$unrestrained_pct),
+    state_b_pct = c(data_b$alcohol_pct, data_b$speeding_pct, data_b$unrestrained_pct)
+  ) %>%
+    mutate(
+      disparity = abs(state_a_pct - state_b_pct),
+      diff_text = paste0("Difference: ", round(state_a_pct - state_b_pct, 1), " pts")
+    ) %>%
+    arrange(disparity) %>%
+    mutate(factor = factor(factor, levels = factor))
+  
+  # Legend
+  name_a <- data_a$state_name
+  name_b <- data_b$state_name
+  
+  # Bar chart
+  plot_ly(factors_df) %>%
+    add_trace(
+      type = "bar",
+      orientation = "h",
+      y = ~factor,
+      x = ~state_a_pct,
+      name = name_a,
+      marker = list(color = "rgb(37, 99, 235)"),
+      text = ~paste0(state_a_pct, "%"),
+      textposition = "outside",
+      customdata = ~diff_text,
+      hovertemplate = paste0(name_a, ": %{x}%<br>%{customdata}<extra></extra>")
+    ) %>%
+    add_trace(
+      type = "bar",
+      orientation = "h",
+      y = ~factor,
+      x = ~state_b_pct,
+      name = name_b,
+      marker = list(color = "rgb(234, 88, 12)"),
+      text = ~paste0(state_b_pct, "%"),
+      textposition = "outside",
+      customdata = ~diff_text,
+      hovertemplate = paste0(name_b, ": %{x}%<br>%{customdata}<extra></extra>")
+    ) %>%
+    layout(
+      barmode = "group",
+      xaxis = list(title = "Percent of Fatal Crashes (%)",
+                   ticksuffix = "%",
+                   range = list(0, 50)),
+      yaxis = list(title = ""),
+      legend = list(orientation = "h", x = 0.5, xanchor = "center", y = -0.25),
+      margin = list(t = 75, b = 100)
+    ) %>%
+    config(displayModeBar = FALSE)
+})
+```
+
+Row {data-height=120}
+-----------------------------------------------------------------------
+
+### Why this matters
+
+Traffic crashes kill more than 40,000 Americans every year, and reducing that toll requires understanding where and why fatalities occur. This dashboard enables researchers and policy analysts to quickly observe trends and make comparisons about traffic fatality patterns between states, supporting the targeted interventions needed to reduce traffic fatalities in the United States.
+
+About the Data
+=======================================================================
+
+Row
+-----------------------------------------------------------------------
+
+###
+
+**Data Source**
+
+The Fatality Analysis Reporting System (FARS) is a nationwide census of fatal motor vehicle traffic crashes maintained by the National Highway Traffic Safety Administration (NHTSA) since 1975, with aggregate data for this dashboard sourced from NHTSA's State Traffic Data fact sheets for 2023 (https://crashstats.nhtsa.dot.gov/Api/Public/ViewPublication/813743)
+and 2022 (https://crashstats.nhtsa.dot.gov/Api/Public/ViewPublication/813592.pdf). 
+
+**Sample Size**
+
+The dashboard covers 50 states and Washington DC, totaling 40,901 traffic fatalities in 2023 and 42,514 in 2022.
+
+**Data Collection**
+
+NHTSA has agreements with a traffic agency in each state where trained analysts provide information on every fatal crash using accident reports, state vehicle registration and driver licensing files, hospital records, death certificates, and coroner reports.
+
+**Study Population**
+
+To qualify as a FARS case, a crash must involve a motor vehicle traveling on a publicly accessible trafficway, and result in the death of a vehicle occupant or non-occupant within 30 days of the crash.
+
+**Time Period**
+
+This dashboard displays data for motor vehicle crashes which was collected in 2022 and 2023. 
